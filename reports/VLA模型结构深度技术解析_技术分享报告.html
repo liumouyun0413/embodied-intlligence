@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VLA 模型结构深度技术解析</title>
+<style>
+@page { size: A4; margin: 16mm 15mm 16mm 15mm; }
+* { box-sizing: border-box; }
+body { margin: 0; color: #1d2939; font-family: "Noto Sans CJK SC", "Alibaba PuHuiTi", sans-serif; font-size: 10.2pt; line-height: 1.62; }
+h1, h2, h3, h4 { color: #102a43; page-break-after: avoid; }
+h1 { font-size: 25pt; line-height: 1.25; margin: 0 0 10mm; }
+h2 { font-size: 17pt; border-bottom: 2px solid #2563eb; padding-bottom: 2mm; margin: 9mm 0 4mm; }
+h3 { font-size: 13pt; margin: 6mm 0 2mm; }
+h4 { font-size: 11pt; margin: 4mm 0 1mm; }
+p { margin: 1.8mm 0; text-align: justify; }
+ul, ol { margin: 2mm 0 3mm 6mm; padding-left: 5mm; }
+li { margin: 1mm 0; }
+strong { color: #0f3b66; }
+.cover { height: 263mm; display: flex; flex-direction: column; justify-content: center; position: relative; page-break-after: always; background: linear-gradient(145deg,#eff6ff 0%,#fff 52%,#ecfeff 100%); padding: 20mm; }
+.cover::before { content:""; position:absolute; left:0; top:0; width:8mm; height:100%; background:linear-gradient(#1d4ed8,#0891b2); }
+.cover .tag { color:#2563eb; letter-spacing:2px; font-weight:700; font-size:11pt; }
+.cover .sub { font-size:15pt; color:#475467; margin-top:4mm; }
+.cover .meta { margin-top:35mm; color:#667085; }
+.big-formula { border-radius: 4mm; padding: 7mm; margin: 8mm 0; color:white; background:linear-gradient(120deg,#1d4ed8,#0e7490); font-family:"Noto Serif CJK SC", serif; font-size:15pt; text-align:center; }
+.toc { page-break-after: always; }
+.toc ol { columns:2; column-gap:12mm; }
+.toc li { break-inside:avoid; margin:3mm 0; font-size:11pt; }
+.chapter { page-break-before: always; }
+.callout { border-left: 4px solid #2563eb; background:#eff6ff; padding:3mm 4mm; margin:4mm 0; border-radius:0 2mm 2mm 0; }
+.warning { border-left-color:#f59e0b; background:#fffbeb; }
+.conclusion { border-left-color:#059669; background:#ecfdf5; }
+.formula { font-family:"Noto Serif CJK SC", serif; text-align:center; font-size:12pt; background:#f8fafc; border:1px solid #d0d5dd; border-radius:2mm; padding:3mm; margin:3mm 0; }
+.pipeline { display:flex; align-items:stretch; justify-content:center; gap:2mm; margin:5mm 0; page-break-inside:avoid; }
+.pipeline .box { flex:1; border:1px solid #93c5fd; background:#eff6ff; border-radius:2mm; padding:3mm 2mm; text-align:center; min-height:17mm; display:flex; align-items:center; justify-content:center; font-weight:600; }
+.pipeline .arrow { display:flex; align-items:center; color:#2563eb; font-size:18pt; }
+.grid2 { display:grid; grid-template-columns:1fr 1fr; gap:4mm; margin:4mm 0; }
+.card { border:1px solid #d0d5dd; border-radius:2mm; padding:4mm; background:white; page-break-inside:avoid; }
+.card h3, .card h4 { margin-top:0; }
+table { width:100%; border-collapse:collapse; margin:4mm 0; font-size:8.8pt; page-break-inside:auto; }
+th { background:#164e63; color:white; font-weight:600; }
+th, td { border:1px solid #cbd5e1; padding:2.1mm; vertical-align:top; }
+tr:nth-child(even) td { background:#f8fafc; }
+tr { page-break-inside:avoid; }
+.small { font-size:8.7pt; color:#475467; }
+.badge { display:inline-block; padding:.4mm 2mm; border-radius:5mm; background:#dbeafe; color:#1d4ed8; font-size:8.5pt; font-weight:700; }
+.footer-note { color:#667085; font-size:8.5pt; }
+.page-break { page-break-before:always; }
+.no-break { page-break-inside:avoid; }
+</style>
+</head>
+<body>
+<section class="cover">
+  <div class="tag">EMBODIED INTELLIGENCE · TECHNICAL REPORT</div>
+  <h1>VLA（Vision-Language-Action）<br>模型结构深度技术解析</h1>
+  <div class="sub">从行为克隆、动作 Token 到 Flow Matching 与开放世界泛化</div>
+  <div class="big-formula">VLA = VLM 语义先验 + 动作生成模型 + 异构数据 + 闭环执行</div>
+  <div class="meta">机器人具身智能技术分享会<br>技术总结报告 · 2026 年 7 月</div>
+</section>
+
+<section class="toc">
+<h2>目录与报告主线</h2>
+<ol>
+<li>VLA 的问题定义与系统边界</li>
+<li>技术演进：BC → ACT → RT-1 → 现代 VLA</li>
+<li>VLA 通用结构：视觉、语言、状态与动作</li>
+<li>动作生成路线：回归、Token、Diffusion、Flow</li>
+<li>π0：VLM 与 Action Expert 的协作</li>
+<li>π0.5：混合动作表示、层级推理与 Co-training</li>
+<li>GR00T：Flow-DiT 与显式跨本体条件化</li>
+<li>主流模型横向比较</li>
+<li>数据、训练、闭环执行与部署</li>
+<li>评估体系、瓶颈和未来趋势</li>
+</ol>
+<div class="callout conclusion"><strong>递进逻辑：</strong>先解决“动作怎么学”，再解决“视觉和语言怎么统一”，继而解决“连续动作如何高质量生成”，最后解决“如何跨任务、跨场景、跨本体泛化”。</div>
+</section>
+
+<section>
+<h2>执行摘要</h2>
+<p>VLA 模型将视觉观测、自然语言任务与机器人状态映射为可执行动作，是连接通用多模态认知与物理控制的核心技术层。其基本目标为：</p>
+<div class="formula">π<sub>θ</sub>(I<sub>t−k:t</sub>, q<sub>t−k:t</sub>, ℓ) → a<sub>t:t+H</sub></div>
+<p>其中 I 是多相机观测，q 是机器人本体状态，ℓ 是语言指令，a 是未来 H 步动作序列。现代 VLA 的性能不只由 VLM 参数量决定，而取决于四个共同因素：</p>
+<div class="grid2">
+<div class="card"><h4>语义主干</h4><p>利用视觉语言预训练理解物体、场景、指令和空间关系。</p></div>
+<div class="card"><h4>动作表示</h4><p>连续回归、离散 Token、Diffusion 或 Flow Matching 决定控制精度与实时性。</p></div>
+<div class="card"><h4>数据配方</h4><p>目标机器人、跨本体、网页语义、高层子任务和语言示范提供互补知识。</p></div>
+<div class="card"><h4>闭环系统</h4><p>Action Chunk、重规划频率、低层控制器和安全过滤决定真实部署表现。</p></div>
+</div>
+<div class="callout"><strong>核心判断：</strong>VLA 不是“VLM 后面接一个机械臂输出头”，而是语义表征、动作分布、时序闭环和机器人接口的联合设计。</div>
+</section>
+
+<section class="chapter">
+<h2>1. VLA 的问题定义与系统边界</h2>
+<h3>1.1 从模块化机器人到端到端策略</h3>
+<div class="pipeline"><div class="box">感知</div><div class="arrow">→</div><div class="box">任务规划</div><div class="arrow">→</div><div class="box">运动规划</div><div class="arrow">→</div><div class="box">控制执行</div></div>
+<p>传统系统可解释且容易施加硬约束，但存在误差级联、人工技能库维护成本高、复杂接触难建模、新场景泛化弱等问题。VLA 将多级管线压缩为条件策略，通过示范数据直接学习从语义观测到动作的映射。</p>
+<h3>1.2 VLA 必须同时解决的五个问题</h3>
+<ol>
+<li><strong>任务语义：</strong>理解“清理厨房”等开放指令。</li>
+<li><strong>视觉落地：</strong>将“盘子”“抽屉”等语言概念定位到当前图像。</li>
+<li><strong>动作生成：</strong>输出关节、末端、夹爪、底盘或躯干控制量。</li>
+<li><strong>长时序：</strong>维持子任务进度，完成多分钟、多阶段行为。</li>
+<li><strong>泛化：</strong>适应新物体、新布局、新任务组合和新机器人本体。</li>
+</ol>
+<h3>1.3 VLA 与底层控制器的关系</h3>
+<p>VLA 通常输出目标位姿、关节目标或底盘速度，低层仍由 PD、位置或速度控制器跟踪。VLA 负责“做什么、向哪里运动”，控制器负责“如何稳定到达目标”。因此端到端学习并不意味着取消关节限位、急停和碰撞保护。</p>
+</section>
+
+<section class="chapter">
+<h2>2. 技术演进：BC → ACT → RT-1 → 现代 VLA</h2>
+<h3>2.1 Behavioral Cloning：单步动作拟合</h3>
+<div class="formula">L<sub>BC</sub> = E<sub>(o,a)~D</sub>[ ‖a − π<sub>θ</sub>(o)‖² ]</div>
+<p>行为克隆实现简单，但单步回归容易产生抖动；多解任务可能输出“平均动作”；部署状态逐步偏离专家数据后误差持续累积。</p>
+<h3>2.2 ACT：Action Chunk 与潜变量</h3>
+<p>ACT 一次输出未来动作段，而不是下一步动作：</p>
+<div class="formula">π<sub>θ</sub>(o<sub>t</sub>) → â<sub>t:t+H</sub></div>
+<p>其 DETR 风格查询对应未来动作槽位，CVAE 潜变量描述同一观测下的多种合理轨迹，训练目标为：</p>
+<div class="formula">L<sub>ACT</sub> = L<sub>action</sub> + β · KL(q<sub>φ</sub>(z|o,a) ‖ p(z))</div>
+<p>ACT 还可对不同时刻针对当前步的预测进行 Temporal Aggregation，缓解动作 chunk 边界跳变。ACT 本身没有语言输入，严格说不是 VLA，但奠定了多相机融合、动作分块和闭环执行等基础。</p>
+<h3>2.3 Mobile ALOHA：从双臂扩展到全身动作</h3>
+<div class="formula">a<sub>t</sub> = [a<sub>left</sub>, a<sub>right</sub>, v, ω] ∈ R¹⁶</div>
+<p>Mobile ALOHA 将 14 维双臂关节与夹爪动作和 2 维底盘速度直接拼接，证明统一向量动作可以支撑双臂移动操作。其另一关键发现是：静态 ALOHA 数据虽然没有底盘动作，但补零后与移动数据共同训练，仍可提供通用抓取与接近物体的运动先验。</p>
+<div class="callout conclusion"><strong>启示：</strong>异构但相关的数据不必与目标机器人完全同分布，只要共享视觉、语义或动作结构，就可能产生正迁移。</div>
+<h3>2.4 RT-1：把动作变成 Token</h3>
+<p>RT-1 将连续动作每一维量化到有限词表，再由 Transformer 自回归预测：</p>
+<div class="formula">τ<sub>t,d</sub> = Quantize(a<sub>t,d</sub>),　L = −Σ log p<sub>θ</sub>(τ<sub>t,d</sub>|I,ℓ,τ&lt;)</div>
+<div class="pipeline"><div class="box">图像</div><div class="arrow">→</div><div class="box">EfficientNet + FiLM</div><div class="arrow">→</div><div class="box">TokenLearner</div><div class="arrow">→</div><div class="box">Transformer</div><div class="arrow">→</div><div class="box">动作 Token</div></div>
+<p>这一转变让机器人控制可以复用语言模型的序列训练工具，但量化误差和逐 Token 解码延迟限制了精细、实时的连续控制。</p>
+</section>
+
+<section class="chapter">
+<h2>3. 现代 VLA 的通用结构</h2>
+<h3>3.1 四层抽象</h3>
+<table>
+<tr><th>层级</th><th>典型输入/模块</th><th>作用</th></tr>
+<tr><td>输入层</td><td>多视角 RGB、语言、状态、短历史</td><td>提供环境、任务和本体条件</td></tr>
+<tr><td>语义主干</td><td>Vision Encoder、LLM/VLM、跨模态注意力</td><td>理解场景、物体与任务关系</td></tr>
+<tr><td>动作策略层</td><td>Action Token Head、Diffusion/Flow Expert</td><td>将语义条件转换为动作分布</td></tr>
+<tr><td>执行层</td><td>Action Chunk、重规划、PD/位置控制、安全过滤</td><td>形成实时闭环并满足物理约束</td></tr>
+</table>
+<h3>3.2 三种多模态融合方式</h3>
+<div class="grid2">
+<div class="card"><h4>语言调制视觉</h4><p>代表 RT-1。FiLM 使用语言生成缩放和平移参数：F′ = γ(ℓ)⊙F + β(ℓ)。轻量但深层语义交互有限。</p></div>
+<div class="card"><h4>统一多模态 Token</h4><p>图像、文本和状态被映射为共同序列。语义统一、可直接利用大规模 VLM，但计算量较大。</p></div>
+<div class="card"><h4>VLM + Action Expert</h4><p>代表 π0、π0.5、GR00T。大主干负责语义，小动作专家专门负责高频连续控制。</p></div>
+<div class="card"><h4>显式层级推理</h4><p>先生成语义子任务，再以子任务为条件生成动作，降低长时域控制难度。</p></div>
+</div>
+<h3>3.3 为什么动作专家逐渐成为主流</h3>
+<p>VLM 适合抽象语义与开放词汇理解，而连续控制要求高频、低延迟、强状态敏感和细粒度轨迹一致性。动作专家把两类需求隔离：既继承 VLM 的知识，又避免整个大模型反复参与每一步连续去噪。</p>
+</section>
+
+<section class="chapter">
+<h2>4. 动作生成路线：真正的结构分水岭</h2>
+<table>
+<tr><th>路线</th><th>代表</th><th>训练目标</th><th>优势</th><th>局限</th></tr>
+<tr><td>连续回归</td><td>BC、ACT</td><td>L1/L2，ACT 加 KL</td><td>简单、单次前向、低延迟</td><td>多峰动作易平均</td></tr>
+<tr><td>离散 Token</td><td>RT-1、OpenVLA、π0-FAST</td><td>交叉熵</td><td>与 LLM 训练统一、稳定扩展</td><td>量化误差、自回归较慢</td></tr>
+<tr><td>Diffusion</td><td>Diffusion Policy</td><td>噪声或数据预测</td><td>表达多模态轨迹、适合 Chunk</td><td>多步去噪成本</td></tr>
+<tr><td>Flow Matching</td><td>π0、π0.5、GR00T</td><td>速度场 MSE</td><td>连续、高精度、可少步积分</td><td>训练与部署更复杂</td></tr>
+<tr><td>混合式</td><td>π0.5 论文系统</td><td>Token CE + Flow MSE</td><td>兼顾训练吞吐与实时动作</td><td>两阶段配方复杂</td></tr>
+</table>
+<h3>4.1 Flow Matching 的数学直觉</h3>
+<p>Flow Matching 学习一条将动作分布与高斯噪声分布连接起来的连续速度场。以 π0 的约定为例：</p>
+<div class="formula">x<sub>t</sub> = tε + (1−t)a，　u<sub>t</sub> = ε−a</div>
+<div class="formula">L<sub>flow</sub> = E[ ‖v<sub>θ</sub>(x<sub>t</sub>,t,c) − u<sub>t</sub>‖² ]</div>
+<p>推理从噪声开始，使用 Euler 或更高阶求解器沿速度场积分至动作。不同实现可能交换噪声端和动作端，造成目标速度符号相反，但本质等价。</p>
+<h3>4.2 为什么 Action Chunk 很重要</h3>
+<ul>
+<li>并行预测未来轨迹，减少逐步推理开销；</li>
+<li>轨迹内部连续性强于独立单步预测；</li>
+<li>允许只执行前几步并重新观测，兼顾效率和闭环纠错；</li>
+<li>动作生成模型可以直接学习多峰轨迹分布。</li>
+</ul>
+</section>
+
+<section class="chapter">
+<h2>5. π0：VLM 与 Flow Action Expert</h2>
+<h3>5.1 总体结构</h3>
+<div class="pipeline"><div class="box">多相机 + 语言</div><div class="arrow">→</div><div class="box">SigLIP + PaliGemma</div><div class="arrow">→</div><div class="box">语义 Prefix</div><div class="arrow">→</div><div class="box">Action Expert</div><div class="arrow">→</div><div class="box">Flow 动作 Chunk</div></div>
+<p>π0 使用 SigLIP 编码图像，PaliGemma/Gemma 建模视觉语言上下文，并配置较小的 Gemma Action Expert。典型开源配置为 2B 语义主干和约 300M 动作专家。</p>
+<h3>5.2 Prefix / Suffix 分离</h3>
+<ul>
+<li><strong>Prefix：</strong>图像、语言等语义上下文，可在多步 Flow 积分中缓存 KV。</li>
+<li><strong>Suffix：</strong>机器人状态、噪声动作、时间条件和 Action Expert token，每次积分更新。</li>
+</ul>
+<p>该设计降低了连续去噪过程重复运行视觉语言主干的成本，同时维持动作对语义表示的条件依赖。</p>
+<h3>5.3 训练与采样</h3>
+<p>训练时随机采样 Flow 时间，构造噪声动作和目标速度场；推理时先计算并缓存 Prefix，再在 Action Expert 中迭代更新整个动作 Chunk。相比逐动作维度自回归，Flow 能并行处理所有动作时间步和维度。</p>
+<div class="callout"><strong>结构价值：</strong>π0 的重点不是“更大的 VLM”，而是把预训练语义能力与连续动作生成解耦，并通过注意力重新连接。</div>
+</section>
+
+<section class="chapter">
+<h2>6. π0.5：层级推理、混合动作表示与异构 Co-training</h2>
+<h3>6.1 从任务指令到语义子任务</h3>
+<p>π0.5 论文系统联合建模文本子任务和低层动作：</p>
+<div class="formula">π<sub>θ</sub>(a,ℓ̂|o,ℓ) = π<sub>θ</sub>(a|o,ℓ̂) · π<sub>θ</sub>(ℓ̂|o,ℓ)</div>
+<p>例如总体指令是“清理厨房”，模型先产生“拿起盘子”，再以当前图像和该子任务为条件生成连续动作。高层低频运行，低层高频输出 Action Chunk。</p>
+<h3>6.2 两阶段训练</h3>
+<table>
+<tr><th>阶段</th><th>动作表示</th><th>数据</th><th>目的</th></tr>
+<tr><td>Pre-training</td><td>FAST 离散动作 Token</td><td>MM、ME、CE、HL、WD</td><td>高吞吐统一学习机器人动作、文本、框和网页语义</td></tr>
+<tr><td>Post-training</td><td>Token + Flow Action Expert</td><td>MM、ME、HL、WD、VI</td><td>专门化移动操作、保留文本能力并获得实时连续控制</td></tr>
+</table>
+<p>联合目标可概括为：</p>
+<div class="formula">L = L<sub>token</sub> + α · L<sub>flow</sub></div>
+<h3>6.3 数据类型及其作用</h3>
+<table>
+<tr><th>缩写</th><th>数据来源</th><th>主要贡献</th></tr>
+<tr><td>MM</td><td>多环境移动机器人</td><td>目标本体、移动操作和真实长任务</td></tr>
+<tr><td>ME</td><td>多环境静态机器人</td><td>更广场景和通用操作技能</td></tr>
+<tr><td>CE</td><td>实验室跨本体数据</td><td>多任务动作先验</td></tr>
+<tr><td>HL</td><td>高层子任务标注</td><td>任务分解与长时域推理</td></tr>
+<tr><td>WD</td><td>网页图文、VQA、定位</td><td>开放物体语义和 OOD 识别</td></tr>
+<tr><td>VI</td><td>人类语言示范</td><td>将高层选择对齐到低层策略能力</td></tr>
+</table>
+<h3>6.4 为什么“FAST 训练、Flow 执行”</h3>
+<p>FAST 动作 Token 可以与文本和视觉任务统一进行 next-token prediction，训练稳定且吞吐高；但自回归动作解码不利于实时控制。Flow Expert 则并行生成精细连续 Chunk，适合在线执行。混合路线本质是：</p>
+<div class="big-formula">离散 Token 负责规模化知识学习，连续 Flow 负责高质量实时控制</div>
+<h3>6.5 Attention 隔离</h3>
+<ul>
+<li>图像、Prompt、State 构成共享 Prefix；</li>
+<li>FAST Token 看到 Prefix 和此前 FAST Token；</li>
+<li>Action Expert 看到 Prefix 和自身动作 embedding；</li>
+<li>Action Expert 不看 FAST Token，避免两种动作表示的信息泄漏；</li>
+<li>信息从 VLM 单向流向 Action Expert。</li>
+</ul>
+<h3>6.6 关键实验结论</h3>
+<ul>
+<li>训练环境数量增加时，新环境任务进度和语言跟随持续提升；</li>
+<li>去掉 ME 或 CE 会明显降低任务表现，说明跨本体迁移不可替代；</li>
+<li>WD 对一般动作任务影响可能不显著，但对 OOD 物体和高层策略很重要；</li>
+<li>HL 数据即使不在运行时显式输出子任务，也能改善低层策略；</li>
+<li>通用大模型零样本规划不如用机器人数据适配后的高层策略。</li>
+</ul>
+<div class="callout warning"><strong>开源边界：</strong>openpi 可验证 π0.5 的离散状态输入、AdaRMS 时间注入和 Flow Head；论文中的完整高层推理、数据配比及两阶段训练系统并未以单一脚本完整公开，报告中应区分论文系统与仓库实现。</div>
+</section>
+
+<section class="chapter">
+<h2>7. GR00T：Flow-DiT 与显式跨本体条件化</h2>
+<h3>7.1 总体结构</h3>
+<div class="pipeline"><div class="box">图像 + 语言</div><div class="arrow">→</div><div class="box">Qwen3-VL / Cosmos</div><div class="arrow">→</div><div class="box">AlternateVLDiT</div><div class="arrow">→</div><div class="box">Embodiment Decoder</div><div class="arrow">→</div><div class="box">动作 Chunk</div></div>
+<p>当前 GR00T N1.7 实现使用视觉语言主干提取上下文，使用 Flow-Matching DiT 动作头生成连续动作，并以本体 ID 选择本体专属投影参数。</p>
+<h3>7.2 Flow 训练</h3>
+<div class="formula">x<sub>t</sub> = (1−t)ε + ta，　u<sub>t</sub> = a−ε</div>
+<div class="formula">L = E[M ⊙ ‖v<sub>θ</sub>(x<sub>t</sub>,t,c) − u<sub>t</sub>‖²]</div>
+<p>Mask 用于忽略不同机器人补齐后的无效动作维度。推理使用固定步数 Euler 更新，默认配置强调少步实时去噪。</p>
+<h3>7.3 Embodiment Conditioning</h3>
+<div class="formula">y = W<sub>e</sub>x + b<sub>e</sub>，　e = Embodiment ID</div>
+<p>与单纯 Padding 不同，Category-Specific Linear/MLP 为不同机器人分配专属输入和输出投影，使统一主干能够共享语义和轨迹知识，同时保留各本体动作含义。</p>
+<h3>7.4 AlternateVLDiT</h3>
+<p>动作 DiT 区分图像 Token 和非图像 Token，并在不同 Block 中交替进行视觉/语言条件注意力，减少海量视觉 Token 对控制信息的稀释。</p>
+<h3>7.5 与 π0 和 RT-1 的区别</h3>
+<ul>
+<li>与 π0 相同：都采用 VLM + 连续 Flow 动作专家；</li>
+<li>与 π0 不同：主干模型不同，GR00T 的本体专属参数化更显式；</li>
+<li>与 RT-1 不同：RT-1 是离散动作 Token 自回归，GR00T 是连续 Chunk 的速度场生成。</li>
+</ul>
+</section>
+
+<section class="chapter">
+<h2>8. 主流 VLA 模型横向比较</h2>
+<table class="small">
+<tr><th>模型</th><th>语义/视觉主干</th><th>动作表示</th><th>时序输出</th><th>高层推理</th><th>跨本体路径</th></tr>
+<tr><td>ACT</td><td>ResNet + DETR</td><td>连续回归</td><td>Chunk</td><td>无</td><td>任务专用</td></tr>
+<tr><td>RT-1</td><td>EfficientNet + FiLM</td><td>离散 Token</td><td>短序列</td><td>隐式</td><td>固定本体</td></tr>
+<tr><td>RT-2 / OpenVLA</td><td>大型 VLM</td><td>离散 Token</td><td>Token 序列</td><td>隐式语义</td><td>统一 Token/适配</td></tr>
+<tr><td>Octo</td><td>Transformer Policy</td><td>连续 Chunk</td><td>Chunk</td><td>语言条件</td><td>Padding + Mask</td></tr>
+<tr><td>π0</td><td>SigLIP + PaliGemma</td><td>Flow</td><td>连续 Chunk</td><td>隐式</td><td>统一数据/动作</td></tr>
+<tr><td>π0-FAST</td><td>PaliGemma</td><td>FAST Token</td><td>AR Token</td><td>隐式</td><td>Tokenizer</td></tr>
+<tr><td>π0.5</td><td>PaliGemma + Expert</td><td>FAST + Flow</td><td>连续 Chunk</td><td>显式子任务</td><td>异构 Co-training</td></tr>
+<tr><td>GR00T N1.7</td><td>Qwen3-VL/Cosmos + DiT</td><td>Flow</td><td>连续 Chunk</td><td>VLM 条件</td><td>Embodiment MLP</td></tr>
+</table>
+<h3>8.1 模型选型建议</h3>
+<table>
+<tr><th>场景</th><th>推荐路线</th><th>理由</th></tr>
+<tr><td>单机器人、单任务、数据少</td><td>ACT / Diffusion Policy</td><td>训练和部署成本较低，动作质量强</td></tr>
+<tr><td>多任务、固定本体、语言控制</td><td>OpenVLA / π0 微调</td><td>可复用 VLM 语义和语言泛化</td></tr>
+<tr><td>精细连续操作、动作多模态</td><td>π0 / Flow-DiT</td><td>连续动作精度高、Chunk 生成自然</td></tr>
+<tr><td>跨机器人、多本体</td><td>GR00T 类显式本体条件化</td><td>便于处理动作维度与物理语义差异</td></tr>
+<tr><td>长时域开放任务</td><td>层级 VLA + Memory</td><td>需要显式子任务和任务状态管理</td></tr>
+</table>
+</section>
+
+<section class="chapter">
+<h2>9. 数据、训练与闭环执行</h2>
+<h3>9.1 统一轨迹格式</h3>
+<div class="formula">τ = {I<sub>t</sub><sup>1:n</sup>, q<sub>t</sub>, a<sub>t</sub>, ℓ, M<sub>t</sub>, e}<sub>t=1:T</sub></div>
+<p>必须明确动作是关节绝对位置、关节增量、末端位姿、末端增量、速度还是力矩。动作定义不一致往往比模型容量不足更致命。</p>
+<h3>9.2 动作归一化</h3>
+<p>常用分位数归一化降低异常值影响：</p>
+<div class="formula">ã<sub>d</sub> = 2(a<sub>d</sub>−Q<sub>0.01,d</sub>)/(Q<sub>0.99,d</sub>−Q<sub>0.01,d</sub>) − 1</div>
+<h3>9.3 数据混合</h3>
+<div class="formula">p(D<sub>i</sub>) = w<sub>i</sub> / Σ<sub>j</sub>w<sub>j</sub></div>
+<p>不能只按原始数据量采样，否则大数据集会淹没目标机器人数据、精细操作数据与高层标注。混合权重应同时考虑质量、相关性、本体覆盖和任务覆盖。</p>
+<h3>9.4 Action Horizon 与 Execution Horizon</h3>
+<ul>
+<li><strong>Action Horizon：</strong>模型一次预测多少步；</li>
+<li><strong>Execution Horizon：</strong>实际执行多少步后重新观测和规划。</li>
+</ul>
+<p>例如模型预测 50 步但只执行 10 步，可以在轨迹连贯性和闭环纠错之间折中。若控制频率为 f，则 Chunk 时间长度为：</p>
+<div class="formula">T<sub>chunk</sub> = H / f</div>
+<h3>9.5 推荐部署链路</h3>
+<div class="pipeline"><div class="box">机器人采集</div><div class="arrow">→</div><div class="box">推理服务</div><div class="arrow">→</div><div class="box">动作 Chunk</div><div class="arrow">→</div><div class="box">安全过滤</div><div class="arrow">→</div><div class="box">低层控制</div></div>
+<p>相机采集、VLA GPU 推理和机器人控制宜解耦。机器人本地保持高频控制和安全逻辑，GPU 服务器低频返回 Chunk；网络中断时机器人必须安全停止，而不是继续盲目执行过期动作。</p>
+</section>
+
+<section class="chapter">
+<h2>10. 长时域推理、评估与安全</h2>
+<h3>10.1 三种长时域路线</h3>
+<div class="grid2">
+<div class="card"><h4>隐式端到端</h4><p>总任务直接条件低层动作。系统简单，但容易遗忘任务进度。</p></div>
+<div class="card"><h4>显式层级</h4><p>先预测子任务，再生成低层动作。可解释，但高层错误会限制低层。</p></div>
+<div class="card"><h4>外部 Planner + VLA</h4><p>规划灵活并可接入工具和记忆，但 Planner 可能提出低层策略无法执行的步骤。</p></div>
+<div class="card"><h4>层级 + Memory</h4><p>维护已完成步骤、物体位置和失败历史，是更完整的未来形态。</p></div>
+</div>
+<h3>10.2 六维评估体系</h3>
+<table>
+<tr><th>维度</th><th>指标示例</th></tr>
+<tr><td>任务</td><td>整任务成功率、子任务成功率、任务完成比例</td></tr>
+<tr><td>语言</td><td>目标选择、属性约束、空间关系、否定指令</td></tr>
+<tr><td>泛化</td><td>新实例、新类别、新背景、新布局、新本体</td></tr>
+<tr><td>动作</td><td>平滑性、jerk、碰撞、抓取失败、重规划频率</td></tr>
+<tr><td>长时域</td><td>重复步骤、遗忘、失败恢复、任务状态一致性</td></tr>
+<tr><td>实时性</td><td>端到端延迟、控制频率、显存、功耗、吞吐</td></tr>
+</table>
+<h3>10.3 安全边界</h3>
+<div class="formula">a<sub>safe</sub> = SafetyFilter(a<sub>VLA</sub>)</div>
+<p>真实系统仍需关节限位、速度/加速度限制、工作空间约束、自碰撞与环境碰撞检测、人体距离约束、急停和通信看门狗。任何端到端策略都不应被视为安全控制器。</p>
+</section>
+
+<section class="chapter">
+<h2>11. 当前瓶颈与未来趋势</h2>
+<h3>11.1 四个核心瓶颈</h3>
+<ol>
+<li><strong>数据：</strong>真实示范昂贵，失败恢复数据少，长任务标注成本高。</li>
+<li><strong>动作语义：</strong>不同本体即使维度相同，控制量物理意义也可能完全不同。</li>
+<li><strong>记忆：</strong>短上下文难以记住物体位置、已完成步骤和跨房间状态。</li>
+<li><strong>安全与验证：</strong>开放模型输出难以给出形式化可靠性保证。</li>
+</ol>
+<h3>11.2 发展方向</h3>
+<ul>
+<li><strong>层级具身 Agent：</strong>Reasoning、Memory、World Model、VLA 和安全控制协同。</li>
+<li><strong>多传感器 VLA：</strong>融合深度、触觉、力、音频、电机电流和点云。</li>
+<li><strong>交互学习：</strong>利用失败、语言纠正、人类偏好、在线 RL 和自主探索。</li>
+<li><strong>数据组合定律：</strong>研究数据比例、知识共享边界与跨域负迁移，而非只扩大模型。</li>
+<li><strong>高效部署：</strong>KV Cache、少步 Flow、量化、异步 Chunk、端云协同和专用加速。</li>
+</ul>
+</section>
+
+<section class="chapter">
+<h2>12. 总结：一条清晰的技术演进主线</h2>
+<ol>
+<li><strong>ACT 解决动作序列问题：</strong>从单步回归走向 Action Chunk 与闭环聚合。</li>
+<li><strong>RT-1 解决序列统一问题：</strong>将动作离散化并引入 Transformer 自回归。</li>
+<li><strong>现代 VLA 解决语义迁移问题：</strong>利用预训练 VLM 将网页视觉语言知识迁移到控制。</li>
+<li><strong>π0 与 GR00T 解决连续动作问题：</strong>通过 Action Expert 和 Flow Matching 生成高质量 Chunk。</li>
+<li><strong>π0.5 解决开放世界与长时域问题：</strong>以异构 Co-training、混合动作表示和语义子任务实现泛化。</li>
+</ol>
+<div class="big-formula">VLA = 语义主干 × 动作表示 × 数据配方 × 闭环系统</div>
+<p>下一代系统将不只是单一 VLA，而是具备推理、记忆、世界状态、交互学习和安全约束的具身 Agent：</p>
+<div class="formula">Embodied Agent = Reasoning + Memory + World Model + VLA Policy + Safety Controller</div>
+<div class="callout conclusion"><strong>最终判断：</strong>VLA 不是具身智能的终点，而是通用多模态认知与真实物理行动之间最关键的控制接口。</div>
+<h3>建议讨论问题</h3>
+<ul>
+<li>什么时候应该选动作 Token，什么时候应该选 Flow？</li>
+<li>跨本体泛化的主要矛盾是模型、数据，还是动作空间定义？</li>
+<li>长时域任务应由统一模型隐式完成，还是显式引入层级与记忆？</li>
+<li>机器人数据和网页数据分别应该训练哪些能力，如何避免负迁移？</li>
+</ul>
+<p class="footer-note">报告依据 Mobile ALOHA、π0.5 论文材料，以及工作区 ACT、RT-1、openpi 和 Isaac-GR00T 开源实现整理。具体论文数值、训练配比和产品级模型细节应以原论文及官方发布为准。</p>
+</section>
+</body>
+</html>
